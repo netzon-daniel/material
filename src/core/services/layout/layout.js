@@ -35,7 +35,7 @@
   /**
    *   registerLayoutAPI()
    *
-   *   The original ngMaterial Layout solution used attribute selectors and CSS.
+   *   The original AngularJS Material Layout solution used attribute selectors and CSS.
    *
    *  ```html
    *  <div layout="column"> My Content </div>
@@ -210,7 +210,7 @@
 
   /**
    * Tail-hook ngCloak to delay the uncloaking while Layout transformers
-   * finish processing. Eliminates flicker with Material.Layoouts
+   * finish processing. Eliminates flicker with Material.Layouts
    */
   function buildCloakInterceptor(className) {
     return [ '$timeout', function($timeout){
@@ -239,8 +239,8 @@
 
   // *********************************************************************************
   //
-  // These functions create registration functions for ngMaterial Layout attribute directives
-  // This provides easy translation to switch ngMaterial attribute selectors to
+  // These functions create registration functions for AngularJS Material Layout attribute directives
+  // This provides easy translation to switch AngularJS Material attribute selectors to
   // CLASS selectors and directives; which has huge performance implications
   // for IE Browsers
   //
@@ -290,12 +290,12 @@
       var unwatch = attrs.$observe(attrs.$normalize(className), updateFn);
 
       updateFn(getNormalizedAttrValue(className, attrs, ""));
-      scope.$on("$destroy", function() { unwatch() });
+      scope.$on("$destroy", function() { unwatch(); });
     }
   }
 
   /**
-   * Creates a registration function for ngMaterial Layout attribute directive.
+   * Creates a registration function for AngularJS Material Layout attribute directive.
    * This is a `simple` transpose of attribute usage to class usage; where we ignore
    * any attribute value
    */
@@ -360,7 +360,7 @@
       var value = validateAttributeValue(className, newValue || "");
       if ( angular.isDefined(value) ) {
         if (lastClass) element.removeClass(lastClass);
-        lastClass = !value ? className : className + "-" + value.replace(WHITESPACE, "-");
+        lastClass = !value ? className : className + "-" + value.trim().replace(WHITESPACE, "-");
         element.addClass(lastClass);
       }
     };
@@ -407,7 +407,7 @@
    * fallback value
    */
   function validateAttributeValue(className, value, updateFn) {
-    var origValue = value;
+    var origValue;
 
     if (!needsInterpolation(value)) {
       switch (className.replace(SUFFIXES,"")) {
@@ -452,7 +452,7 @@
       }
     }
 
-    return value;
+    return value ? value.trim() : "";
   }
 
   /**
@@ -479,7 +479,7 @@
 
   function getNormalizedAttrValue(className, attrs, defaultVal) {
     var normalizedAttr = attrs.$normalize(className);
-    return attrs[normalizedAttr] ? attrs[normalizedAttr].replace(WHITESPACE, "-") : defaultVal || null;
+    return attrs[normalizedAttr] ? attrs[normalizedAttr].trim().replace(WHITESPACE, "-") : defaultVal || null;
   }
 
   function findIn(item, list, replaceWith) {
@@ -503,7 +503,7 @@
 
     attrValue = (attrValue || "");
 
-    if ( attrValue.indexOf("-") == 0 || attrValue.indexOf(" ") == 0) {
+    if ( attrValue.indexOf("-") === 0 || attrValue.indexOf(" ") === 0) {
       // For missing main-axis values
       attrValue = "none" + attrValue;
     }

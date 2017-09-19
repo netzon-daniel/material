@@ -6,7 +6,7 @@
  * @restrict E
  *
  * @description
- * Use the `<md-tab>` a nested directive used within `<md-tabs>` to specify a tab with a **label** and optional *view content*.
+ * The `<md-tab>` is a nested directive used within `<md-tabs>` to specify a tab with a **label** and optional *view content*.
  *
  * If the `label` attribute is not specified, then an optional `<md-tab-label>` tag can be used to specify more
  * complex tab header markup. If neither the **label** nor the **md-tab-label** are specified, then the nested
@@ -61,12 +61,12 @@ function MdTab () {
       var label = firstChild(element, 'md-tab-label'),
           body  = firstChild(element, 'md-tab-body');
 
-      if (label.length == 0) {
+      if (label.length === 0) {
         label = angular.element('<md-tab-label></md-tab-label>');
         if (attr.label) label.text(attr.label);
         else label.append(element.contents());
 
-        if (body.length == 0) {
+        if (body.length === 0) {
           var contents = element.contents().detach();
           body         = angular.element('<md-tab-body></md-tab-body>');
           body.append(contents);

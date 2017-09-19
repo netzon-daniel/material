@@ -12,6 +12,7 @@ describe('$mdCompiler service', function() {
     return compileData;
   }
 
+
   describe('setup', function() {
 
     it('element should use templateUrl', inject(function($templateCache) {
@@ -132,6 +133,22 @@ describe('$mdCompiler service', function() {
         expect(data.element.controller().injectedOne).toBe(1);
       }));
 
+      it('should instantiate the controller with $element as local', inject(function($rootScope) {
+        var ctrlElement = null;
+
+        var data = compile({
+          template: '<span>hello</span>',
+          controller: function Ctrl($scope, $element) {
+            ctrlElement = $element;
+          }
+        });
+
+        var scope = $rootScope.$new();
+        data.link(scope);
+
+        expect(ctrlElement).toBe(data.element);
+      }));
+
       it('should compile with controllerAs', inject(function($rootScope) {
         var data = compile({
           template: '<span>hello</span>',
@@ -143,24 +160,272 @@ describe('$mdCompiler service', function() {
         expect(scope.myControllerAs).toBe(data.element.controller());
       }));
 
-      it('should work with bindToController', inject(function($rootScope) {
-        var called = false;
-        var data = compile({
-          template: 'hello',
-          controller: function($scope) {
-            expect(this.name).toBe('Bob');
-            expect($scope.$apply).toBeTruthy(); // test DI working properly
-            called = true;
-          },
-          controllerAs: 'ctrl',
-          bindToController: true,
-          locals: { name: 'Bob' }
+    });
+
+  });
+
+  [
+      {respectPreAssignBindingsEnabled: true},
+      {respectPreAssignBindingsEnabled: false},
+      // TODO change `equivalentTo` to `true` in Material 1.2.
+      {respectPreAssignBindingsEnabled: '"default"', equivalentTo: false}
+  ].forEach(function(options) {
+    var realRespectPreAssignBindingsEnabled = options.respectPreAssignBindingsEnabled;
+    var respectPreAssignBindingsEnabled = angular.isDefined(options.equivalentTo) ?
+      options.equivalentTo :
+      realRespectPreAssignBindingsEnabled;
+
+    describe('with respectPreAssignBindingsEnabled set to ' + realRespectPreAssignBindingsEnabled, function() {
+      var preAssignBindingsEnabledInAngularJS = angular.version.minor < 6;
+
+      beforeEach(function() {
+        module(function($mdCompilerProvider) {
+          // Don't set the value so that the default state can be tested.
+          if (typeof realRespectPreAssignBindingsEnabled === 'boolean') {
+            $mdCompilerProvider.respectPreAssignBindingsEnabled(realRespectPreAssignBindingsEnabled);
+          }
         });
-        var scope = $rootScope.$new();
-        data.link(scope);
-        expect(scope.ctrl.name).toBe('Bob');
-        expect(called).toBe(true);
-      }));
+      });
+      
+      function compileAndLink(options) {
+        var compileData;
+
+        inject(function($mdCompiler, $rootScope) {
+          $mdCompiler.compile(options).then(function(data) {
+            data.link($rootScope);
+            compileData = data;
+          });
+
+          $rootScope.$apply();
+        });
+
+        return compileData;
+      }
+
+      it('should call $onInit even if bindToController is set to false', function() {
+        var isInstantiated = false;
+
+        function TestController($scope, name) {
+          isInstantiated = true;
+          expect($scope.$apply).toBeTruthy();
+          expect(name).toBe('Bob');
+        }
+
+        TestController.prototype.$onInit = jasmine.createSpy('$onInit');
+
+        compileAndLink({
+          template: 'hello',
+          controller: TestController,
+          bindToController: false,
+          locals: {name: 'Bob'}
+        });
+
+        expect(TestController.prototype.$onInit).toHaveBeenCalledTimes(1);
+        expect(isInstantiated).toBe(true);
+      });
+
+      // Bindings are not preassigned only if we respect the AngularJS config and they're
+      // disabled there. This logic will change in Material 1.2.0.
+      if (respectPreAssignBindingsEnabled && !preAssignBindingsEnabledInAngularJS) {
+        it('disabled should assign bindings after constructor', function() {
+          var isInstantiated = false;
+
+          function TestController($scope) {
+            isInstantiated = true;
+            expect($scope.$apply).toBeTruthy();
+            expect(this.name).toBeUndefined();
+          }
+
+          TestController.prototype.$onInit = function() {
+            expect(this.name).toBe('Bob');
+          };
+
+          spyOn(TestController.prototype, '$onInit').and.callThrough();
+
+          compileAndLink({
+            template: 'hello',
+            controller: TestController,
+            controllerAs: 'ctrl',
+            bindToController: true,
+            locals: {name: 'Bob'}
+          });
+
+          expect(TestController.prototype.$onInit).toHaveBeenCalledTimes(1);
+          expect(isInstantiated).toBe(true);
+        });
+      } else {
+        it('enabled should assign bindings at instantiation', function() {
+          var isInstantiated = false;
+
+          function TestController($scope) {
+            isInstantiated = true;
+            expect($scope.$apply).toBeTruthy();
+            expect(this.name).toBe('Bob');
+          }
+
+          compileAndLink({
+            template: 'hello',
+            controller: TestController,
+            controllerAs: 'ctrl',
+            bindToController: true,
+            locals: {name: 'Bob'}
+          });
+
+          expect(isInstantiated).toBe(true);
+        });
+
+        it('enabled should assign bindings at instantiation even if $onInit defined', function() {
+          var isInstantiated = false;
+
+          function TestController($scope) {
+            isInstantiated = true;
+            expect($scope.$apply).toBeTruthy();
+            expect(this.name).toBe('Bob');
+          }
+
+          TestController.prototype.$onInit = jasmine.createSpy('$onInit');
+
+          compileAndLink({
+            template: 'hello',
+            controller: TestController,
+            controllerAs: 'ctrl',
+            bindToController: true,
+            locals: {name: 'Bob'}
+          }, true);
+
+          expect(TestController.prototype.$onInit).toHaveBeenCalledTimes(1);
+          expect(isInstantiated).toBe(true);
+        });
+      }
+
     });
   });
+
+  describe('with contentElement', function() {
+
+    var $rootScope, $compile = null;
+    var element, parent = null;
+
+    beforeEach(inject(function($injector) {
+      $rootScope = $injector.get('$rootScope');
+      $compile = $injector.get('$compile');
+
+      parent = angular.element('<div>');
+      element = angular.element('<div class="contentEl">Content Element</div>');
+
+      parent.append(element);
+
+      // Append the content parent to the document, otherwise contentElement is not able
+      // to detect it properly.
+      document.body.appendChild(parent[0]);
+
+    }));
+
+    afterEach(function() {
+      parent.remove();
+    });
+
+    it('should also work with a virtual DOM element', function() {
+
+      var virtualEl = angular.element('<div>Virtual</div>');
+
+      var data = compile({
+        contentElement: virtualEl
+      });
+
+      var contentElement = data.link($rootScope);
+
+      expect(contentElement[0]).toBe(virtualEl[0]);
+      expect(contentElement.parentNode).toBeFalsy();
+
+      data.cleanup();
+
+      expect(contentElement.parentNode).toBeFalsy();
+    });
+
+    it('should also support a CSS selector as query', function() {
+
+      var data = compile({
+        contentElement: '.contentEl'
+      });
+
+      var contentElement = data.link($rootScope);
+
+      expect(element[0].parentNode).toBe(parent[0]);
+      expect(contentElement[0]).toBe(element[0]);
+
+      // Remove the element from the DOM to simulate a element move.
+      contentElement.remove();
+
+      expect(element[0].parentNode).not.toBe(parent[0]);
+
+      // Cleanup the compilation by restoring it at its old DOM position.
+      data.cleanup();
+
+      expect(element[0].parentNode).toBe(parent[0]);
+    });
+
+    it('should restore the contentElement at its previous position', function() {
+
+      var data = compile({
+        contentElement: element
+      });
+
+      var contentElement = data.link($rootScope);
+
+      expect(element[0].parentNode).toBe(parent[0]);
+      expect(contentElement[0]).toBe(element[0]);
+
+      // Remove the element from the DOM to simulate a element move.
+      contentElement.remove();
+
+      expect(element[0].parentNode).not.toBe(parent[0]);
+
+      // Cleanup the compilation by restoring it at its old DOM position.
+      data.cleanup();
+
+      expect(element[0].parentNode).toBe(parent[0]);
+    });
+
+    it('should not link to a new scope', function() {
+
+      var data = compile({
+        contentElement: element
+      });
+
+      var contentElement = data.link($rootScope);
+
+      expect(contentElement.scope()).toBeFalsy();
+    });
+
+    it('should preserve a previous linked scope', function() {
+
+      var scope = $rootScope.$new();
+
+      var data = compile({
+        contentElement: $compile('<div>With Scope</div>')(scope)
+      });
+
+      var contentElement = data.link($rootScope);
+
+      expect(contentElement.scope()).toBe(scope);
+    });
+
+    it('should not instantiate a new controller', function() {
+
+      var controllerSpy = jasmine.createSpy('Controller Function');
+
+      var data = compile({
+        contentElement: element,
+        controller: controllerSpy
+      });
+
+      data.link($rootScope);
+
+      expect(controllerSpy).not.toHaveBeenCalled();
+    });
+
+  });
+
+
 });
